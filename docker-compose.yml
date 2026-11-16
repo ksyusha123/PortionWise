@@ -1,0 +1,95 @@
+name: food-diary
+x-common: &common
+  restart: unless-stopped
+  init: true
+  networks: [food]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+x-backend-env: &backend-env
+  AUTH_SECRET: ${AUTH_SECRET:?Run scripts/setup.ps1 first}
+  DB_PATH: /data/app.db
+services:
+  user-service:
+    <<: *common
+    build:
+      context: .
+      dockerfile: deploy/user-service.Dockerfile
+    environment:
+      <<: *backend-env
+      INTERNAL_KEY: ${INTERNAL_KEY:?Run scripts/setup.ps1 first}
+      ADDR: :8081
+    volumes: ["users-data:/data"]
+    ports: ["127.0.0.1:8081:8081"]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8081/healthz]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+  analysis-service:
+    <<: *common
+    build:
+      context: .
+      dockerfile: deploy/analysis-service.Dockerfile
+    environment:
+      <<: *backend-env
+      ADDR: :8082
+      USER_URL: http://user-service:8081
+      YANDEX_API_KEY: ${YANDEX_API_KEY:-}
+      YANDEX_MODEL: ${YANDEX_MODEL:-gpt://b1gh4nec0stgefclroq9/deepseek-v4.1-flash/latest}
+      YANDEX_BASE_URL: ${YANDEX_BASE_URL:-https://ai.api.cloud.yandex.net/v1}
+      AI_MODE: ${AI_MODE:-yandex}
+    depends_on:
+      user-service: {condition: service_healthy}
+    volumes: ["analysis-data:/data"]
+    ports: ["127.0.0.1:8082:8082"]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8082/healthz]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+  diary-service:
+    <<: *common
+    build:
+      context: .
+      dockerfile: deploy/diary-service.Dockerfile
+    environment:
+      <<: *backend-env
+      ADDR: :8083
+      USER_URL: http://user-service:8081
+      ANALYSIS_URL: http://analysis-service:8082
+    depends_on:
+      user-service: {condition: service_healthy}
+    volumes: ["diary-data:/data"]
+    ports: ["127.0.0.1:8083:8083"]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8083/healthz]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+  telegram-bot:
+    <<: *common
+    build:
+      context: .
+      dockerfile: deploy/telegram-bot.Dockerfile
+    environment:
+      DB_PATH: /data/app.db
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env}
+      INTERNAL_KEY: ${INTERNAL_KEY}
+      USER_URL: http://user-service:8081
+      ANALYSIS_URL: http://analysis-service:8082
+      DIARY_URL: http://diary-service:8083
+    depends_on:
+      user-service: {condition: service_healthy}
+      analysis-service: {condition: service_healthy}
+      diary-service: {condition: service_healthy}
+    volumes: ["bot-data:/data"]
+networks:
+  food:
+volumes:
+  users-data:
+  analysis-data:
+  diary-data:
+  bot-data:
