@@ -1,5 +1,6 @@
-# Food Diary — MVP на Go
+# Food Diary
 
+**Telegram-бот:** [@portion_wise_bot](https://t.me/portion_wise_bot). 
 Telegram-бот для дневника питания с анализом фотографий через Yandex AI Studio.
 Три автономных бизнес-сервиса, отдельное приложение бота, HTTP-взаимодействие и собственная SQLite-база у каждого приложения.
 
